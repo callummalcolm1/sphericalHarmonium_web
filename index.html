@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Quark Diag Visualization</title>
+        <style>
+            .cell {
+                display: inline-block;
+                margin-right: 5px;
+            }
+            .harmonic-btn,
+            .particle-btn {
+                cursor: pointer;
+                outline: none;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 20px;
+                border-radius: 4px;
+                background-color: #eee;
+                color: black;
+                font-size: 18px;
+            }
+            .harmonic-btn:hover,
+            .particle-btn:hover {
+                background-color: #ccc;
+            }
+            .cell.active {
+                outline: 3px solid blue;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Quark Diag Visualization</h1>
+        <div id="grid">
+            <!-- Quark Diagrams will be rendered here -->
+        </div>
+        <div id="sound-effects">
+            <button id="pauseBtn">Pause</button>
+        </div>
+        <button id="speedSlider">Speed (%)</button><span id="speedVal"></span>
+        <button id="durationSlider">Duration (*)</button
+        ><span id="durationVal"></span>
+        <button id="positionSlider">Position (x)</button
+        ><span id="positionVal"></span>
+
+        <br />
+        <div id="patch-info">
+            <div
+                class="particle-btn"
+                style="background-color: #c0c0c0; color: white"
+            >
+                Patch Info
+            </div>
+        </div>
+
+        <script>
+            document
+                .getElementById("speedSlider")
+                .addEventListener("input", async (e) => {
+                    await initAudio();
+                    speedFactor = e.target.value / 100;
+                    document.getElementById("speedVal").textContent =
+                        speedFactor.toFixed(2) + "x";
+                    sendToPatch("volume", speedFactor);
+                    updatePatchFrequencies();
+                });
+
+            // Other listeners and methods...
+
+            async function playPress() {
+                await initAudio();
+                modeBtn.classList.add("play-active");
+                sendToPatch("play", 1.0);
+            }
+
+            function playRelease() {
+                playBtn.classList.remove("play-active");
+                sendToPatch("play", 0.0);
+            }
+
+            document
+                .getElementById("speedSlider")
+                .addEventListener("mousedown", playPress);
+            document
+                .getElementById("speedSlider")
+                .addEventListener("mouseup", playRelease);
+
+            // More listeners and other functionalities...
+        </script>
+
+        <script>
+            const canvases = [];
+
+            function drawSH(cv, l, m, rotY) {
+                // Drawing shader code here
+            }
+
+            async function animate(ts) {
+                if (!paused && lastTime) {
+                    const dt = (ts - lastTime) / 1000;
+                    canvases.forEach((c, i) => {
+                        if (c.active) {
+                            angles[i] =
+                                (angles[i] +
+                                    dt * c.hz * speedFactor * Math.PI * 2) %
+                                (Math.PI * 2);
+                            drawSH(c.cv, c.l, c.m, angles[i]);
+                        }
+                    });
+                }
+                lastTime = ts;
+                requestAnimationFrame(animate);
+            }
+
+            async function initAudio() {
+                const ctx = new AudioContext();
+                // Initialization logic here
+            }
+
+            function buildGrid() {
+                const grid = document.getElementById("grid");
+                grid.innerHTML = "";
+                canvases.length = 0;
+
+                const size = getCanvasSize();
+
+                harmonics.forEach(({ l, m, label, sub }, index) => {
+                    const cell = document.createElement("div");
+                    cell.className = "cell";
+
+                    const cv = document.createElement("canvas");
+                    cv.width = cv.height = size;
+
+                    const btn = document.createElement("button");
+                    btn.className = `harmonic-btn`;
+                    btn.innerHTML = `${label}<br>${sub}`;
+
+                    btn.addEventListener("click", async () => {
+                        await initAudio();
+                        const isToggled = btn.classList.toggle("active");
+                        canvases[index].active = isToggled;
+                        sendToPatch(`sw${index + 1}`, isToggled ? 1.0 : 0.0);
+                        if (isToggled) {
+                            sendToPatch(
+                                `L${index + 1}`,
+                                harmonics[index].hz * speedFactor,
+                            );
+                        }
+                    });
+
+                    cell.appendChild(cv);
+                    cell.appendChild(btn);
+                    grid.appendChild(cell);
+                });
+            }
+
+            function buildParticleGrid() {
+                const grid = document.getElementById("particleGrid");
+                grid.innerHTML = "";
+
+                particles.forEach((particle, index) => {
+                    const btn = document.createElement("button");
+                    btn.className = "particle-btn";
+
+                    const jpc = `${particle.J}<sup>${particle.P ?? "?"}${particle.C ?? "?"}</sup>`;
+                    const massStr =
+                        particle.mass != null
+                            ? particle.mass.toFixed(4) + " GeV"
+                            : "—";
+                    const widthStr =
+                        particle.width != null
+                            ? particle.width.toExponential(2) + " GeV"
+                            : "—";
+
+                    btn.innerHTML = `
+            <div class="particle-info">
+                <div class="particle-symbol">${particle.symbol}</div>
+                <div class="particle-name">${particle.name}</div>
+                <div class="particle-meta">J<sup>PC</sup> = ${jpc}</div>
+                <div class="particle-meta">M = ${massStr}</div>
+                <div class="particle-meta">Γ = ${widthStr}</div>
+            </div>
+        `;
+
+                    btn.addEventListener("click", async () => {
+                        await initAudio();
+                        const isSelected = btn.classList.toggle("selected");
+                        sendToPatch(`par${index + 1}`, isSelected ? 1.0 : 0.0);
+                    });
+
+                    grid.appendChild(btn);
+                });
+            }
+
+            function updatePatchFrequencies() {
+                canvases.forEach((c, i) => {
+                    if (c.active && i < 8) {
+                        sendToPatch(`L${i + 1}`, c.hz * speedFactor);
+                    }
+                });
+            }
+        </script>
+    </body>
+</html>
