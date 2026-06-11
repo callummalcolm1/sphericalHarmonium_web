@@ -1,205 +1,1401 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <title>Quark Diag Visualization</title>
-        <style>
-            .cell {
-                display: inline-block;
-                margin-right: 5px;
-            }
-            .harmonic-btn,
-            .particle-btn {
-                cursor: pointer;
-                outline: none;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 10px 20px;
-                border-radius: 4px;
-                background-color: #eee;
-                color: black;
-                font-size: 18px;
-            }
-            .harmonic-btn:hover,
-            .particle-btn:hover {
-                background-color: #ccc;
-            }
-            .cell.active {
-                outline: 3px solid blue;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Quark Diag Visualization</h1>
-        <div id="grid">
-            <!-- Quark Diagrams will be rendered here -->
-        </div>
-        <div id="sound-effects">
-            <button id="pauseBtn">Pause</button>
-        </div>
-        <button id="speedSlider">Speed (%)</button><span id="speedVal"></span>
-        <button id="durationSlider">Duration (*)</button
-        ><span id="durationVal"></span>
-        <button id="positionSlider">Position (x)</button
-        ><span id="positionVal"></span>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/pyodide/v0.27.5/full/pyodide.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mesonification</title>
+<style>
 
-        <br />
-        <div id="patch-info">
-            <div
-                class="particle-btn"
-                style="background-color: #c0c0c0; color: white"
-            >
-                Patch Info
-            </div>
-        </div>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: rgb(0, 0, 0);
+    --border: rgb(40, 40, 40);
+    --text: rgb(255, 255, 255);
+    --text-dim: rgb(255, 255, 255);
+  }
 
-        <script>
-            document
-                .getElementById("speedSlider")
-                .addEventListener("input", async (e) => {
-                    await initAudio();
-                    speedFactor = e.target.value / 100;
-                    document.getElementById("speedVal").textContent =
-                        speedFactor.toFixed(2) + "x";
-                    sendToPatch("volume", speedFactor);
-                    updatePatchFrequencies();
-                });
+  html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Arial', serif;
+  }
 
-            // Other listeners and methods...
+  body {
+      display: grid;
+      grid-template-rows: auto auto 1.5fr auto 1fr;
+      width: 100vw;
+      height: 100vh;
+  }
 
-            async function playPress() {
-                await initAudio();
-                modeBtn.classList.add("play-active");
-                sendToPatch("play", 1.0);
-            }
+  header {
+      padding: 2.5rem;
+      border-bottom: 1px solid var(--border);
+      background: rgb(0, 0, 0);
+  }
 
-            function playRelease() {
-                playBtn.classList.remove("play-active");
-                sendToPatch("play", 0.0);
-            }
+  header h1 {
+      font-weight: 300;
+      font-size: 2rem;
+      letter-spacing: 0.04em;
+  }
 
-            document
-                .getElementById("speedSlider")
-                .addEventListener("mousedown", playPress);
-            document
-                .getElementById("speedSlider")
-                .addEventListener("mouseup", playRelease);
+  header a {
+      font-size: 0.85rem;
+      letter-spacing: 1.3em;
+      opacity: 0.4;
+      text-transform: uppercase;
+      font-family: 'Arial', sans-serif;
+      color: var(--text-dim);
+      text-decoration: none;
+  }
 
-            // More listeners and other functionalities...
-        </script>
+  .controls {
+    padding: 0.8rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgb(0, 0, 0);
+    z-index: 10;
+  }
 
-        <script>
-            const canvases = [];
+  .controls-left {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
 
-            function drawSH(cv, l, m, rotY) {
-                // Drawing shader code here
-            }
+  .controls-right {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+  }
 
-            async function animate(ts) {
-                if (!paused && lastTime) {
-                    const dt = (ts - lastTime) / 1000;
-                    canvases.forEach((c, i) => {
-                        if (c.active) {
-                            angles[i] =
-                                (angles[i] +
-                                    dt * c.hz * speedFactor * Math.PI * 2) %
-                                (Math.PI * 2);
-                            drawSH(c.cv, c.l, c.m, angles[i]);
-                        }
-                    });
-                }
-                lastTime = ts;
-                requestAnimationFrame(animate);
-            }
+  .ctrl-group {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      flex-shrink: 0;
+  }
 
-            async function initAudio() {
-                const ctx = new AudioContext();
-                // Initialization logic here
-            }
+  .ctrl-group label {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+  }
 
-            function buildGrid() {
-                const grid = document.getElementById("grid");
-                grid.innerHTML = "";
-                canvases.length = 0;
+  input[type=range] {
+      -webkit-appearance: none;
+      width: 100px;
+      height: 2px;
+      background: var(--border);
+      outline: none;
+  }
 
-                const size = getCanvasSize();
+  input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text);
+      cursor: pointer;
+  }
 
-                harmonics.forEach(({ l, m, label, sub }, index) => {
-                    const cell = document.createElement("div");
-                    cell.className = "cell";
+  .ctrl-val {
+      font-size: 0.75rem;
+      min-width: 2.5rem;
+  }
 
-                    const cv = document.createElement("canvas");
-                    cv.width = cv.height = size;
+  .btn {
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.4rem 0.9rem;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: transform 0.08s ease;
+      user-select: none;
+  }
 
-                    const btn = document.createElement("button");
-                    btn.className = `harmonic-btn`;
-                    btn.innerHTML = `${label}<br>${sub}`;
+  .btn.inactive {
+      opacity: 0.3;
+      cursor: default;
+      pointer-events: none;
+  }
 
-                    btn.addEventListener("click", async () => {
-                        await initAudio();
-                        const isToggled = btn.classList.toggle("active");
-                        canvases[index].active = isToggled;
-                        sendToPatch(`sw${index + 1}`, isToggled ? 1.0 : 0.0);
-                        if (isToggled) {
-                            sendToPatch(
-                                `L${index + 1}`,
-                                harmonics[index].hz * speedFactor,
-                            );
-                        }
-                    });
+  .grid {
+      width: 100vw;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.4vw;
+      padding: 0 0.5vw;
+      overflow: hidden;
+  }
 
-                    cell.appendChild(cv);
-                    cell.appendChild(btn);
-                    grid.appendChild(cell);
-                });
-            }
+  .graph-row {
+      width: 100vw;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 0.4vw;
+      padding: 0.1rem 0.1vw 3rem;
+      border-bottom: 1px solid var(--border);
+      background: rgb(0,0,0);
+  }
 
-            function buildParticleGrid() {
-                const grid = document.getElementById("particleGrid");
-                grid.innerHTML = "";
+  .cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+  }
 
-                particles.forEach((particle, index) => {
-                    const btn = document.createElement("button");
-                    btn.className = "particle-btn";
+  .graph-canvas {
+      display: block;
+  }
 
-                    const jpc = `${particle.J}<sup>${particle.P ?? "?"}${particle.C ?? "?"}</sup>`;
-                    const massStr =
-                        particle.mass != null
-                            ? particle.mass.toFixed(4) + " GeV"
-                            : "—";
-                    const widthStr =
-                        particle.width != null
-                            ? particle.width.toExponential(2) + " GeV"
-                            : "—";
+  .harmonic-btn {
+      margin-top: 0.45rem;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.65rem;
+      background: rgb(0, 0, 0);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      cursor: pointer;
+      min-width: 92px;
+      color: var(--text);
+  }
+  .harmonic-btn.active {
+      background: rgb(10, 10, 10);
+      color: rgb(255, 255, 255);
+      border-color: var(--text);
+  }
 
-                    btn.innerHTML = `
-            <div class="particle-info">
-                <div class="particle-symbol">${particle.symbol}</div>
-                <div class="particle-name">${particle.name}</div>
-                <div class="particle-meta">J<sup>PC</sup> = ${jpc}</div>
-                <div class="particle-meta">M = ${massStr}</div>
-                <div class="particle-meta">Γ = ${widthStr}</div>
-            </div>
-        `;
+  footer {
+    background: rgb(0, 0, 0);
+    border-top: 1px solid var(--border);
+    width: 100%;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    overflow: hidden;
+    position: relative;
+  }
 
-                    btn.addEventListener("click", async () => {
-                        await initAudio();
-                        const isSelected = btn.classList.toggle("selected");
-                        sendToPatch(`par${index + 1}`, isSelected ? 1.0 : 0.0);
-                    });
+  .particle-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    width: auto;
+  }
 
-                    grid.appendChild(btn);
-                });
-            }
+  .particle-selector h2 {
+    font-size: 1rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight: 400;
+    padding-bottom: 1rem;
+    align-self: flex-start;
+  }
 
-            function updatePatchFrequencies() {
-                canvases.forEach((c, i) => {
-                    if (c.active && i < 8) {
-                        sendToPatch(`L${i + 1}`, c.hz * speedFactor);
-                    }
-                });
-            }
-        </script>
-    </body>
+  .particle-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 2rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.3rem;
+    justify-content: center;
+  }
+
+  .particle-grid.locked .particle-btn {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
+  }
+
+  .particle-btn {
+    flex: 0 0 auto;
+    width: 120px;
+    background: rgb(0, 0, 0);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 0.5rem;
+    min-height: 0;
+    cursor: pointer;
+    transition: background 0s ease, transform 0s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+  }
+
+  .particle-btn:hover { background: rgb(0, 0, 0); }
+
+  .particle-btn.selected {
+    background: rgb(10, 10, 10);
+    border-color: var(--text);
+  }
+
+  .particle-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 0.15rem;
+  }
+
+  .particle-name {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    line-height: 1.1;
+  }
+
+  .particle-symbol {
+    font-size: 1.5rem;
+    color: var(--text);
+    font-family: 'Times New Roman', serif;
+    font-weight: 500;
+    line-height: 1;
+    padding-top: 0.5rem;
+  }
+
+  .particle-meta {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.03em;
+    text-align: center;
+  }
+
+  .status-box {
+    position: absolute;
+    bottom: 1rem;
+    left: 1.5rem;
+  }
+
+  .status-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    opacity: 0.5;
+    margin-bottom: 0.3rem;
+  }
+
+  .status-text {
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    opacity: 0.7;
+    min-height: 1rem;
+  }
+
+  .quark-diagram { display: flex; gap: 4px; align-items: center; }
+  .quark { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--border); }
+  .spring {
+    width: 12px; height: 2px;
+    background: repeating-linear-gradient(90deg, var(--border) 0px, var(--border) 2px, transparent 2px, transparent 4px);
+  }
+
+  /* ─── Landing page ─────────────────────────────────────────────────────── */
+  #landingPage {
+    position: fixed;
+    inset: 0;
+    background: rgb(0,0,0);
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    opacity: 1;
+    transition: opacity 0.6s ease;
+    font-family: 'Arial', sans-serif;
+    color: rgb(255,255,255);
+  }
+
+  #landingPage.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .landing-header {
+    padding: 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .landing-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+  }
+
+  .landing-col {
+    padding: 5rem 12rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 1.6rem;
+    font-family: 'Arial', sans-serif;
+  }
+
+  .landing-col:first-child {
+    border-right: 1px solid var(--border);
+  }
+
+  .landing-eyebrow {
+    font-size: 2rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 1;
+    color: rgb(255,255,255);
+    font-family: 'Arial', sans-serif;
+  }
+
+  .landing-subtitle {
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.5;
+  }
+
+  .landing-body-text {
+    font-size: 1rem;
+    line-height: 1.75;
+    opacity: 0.7;
+    max-width: 44ch;
+  }
+
+  .landing-enter-btn {
+    margin-top: 1rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.7rem 1.6rem;
+    border-radius: 3px;
+    cursor: pointer;
+    width: fit-content;
+    transition: border-color 0.15s ease;
+    font-family: 'Arial', sans-serif;
+  }
+
+  .landing-enter-btn:hover { border-color: var(--text); }
+
+  .landing-footer {
+    padding: 1.2rem 2rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.3;
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Arial', sans-serif;
+  }
+
+  /* ─── Terminal popup ────────────────────────────────────────────────────── */
+  .terminal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .terminal-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+  .terminal-box {
+    width: min(780px, 92vw);
+    max-height: 70vh;
+    background: rgb(0,0,0);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: 'Arial', sans-serif;
+  }
+  .terminal-header {
+    padding: 0.8rem 1.2rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgb(255,255,255);
+    opacity: 0.6;
+    flex-shrink: 0;
+    font-family: 'Arial', sans-serif;
+  }
+  .terminal-body {
+    padding: 1.2rem 1.4rem;
+    overflow-y: auto;
+    flex: 1;
+    font-family: 'Arial', sans-serif;
+    font-size: 0.85rem;
+    line-height: 1.8;
+    color: rgb(255,255,255);
+    opacity: 0.9;
+  }
+  .terminal-line {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .terminal-line.dim { opacity: 0.4; }
+  .terminal-line::before { content: '> '; opacity: 0.3; }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div style="display: flex; align-items: center; gap: 1.5rem;">
+    <a href="https://chime.glasgow.ac.uk/" target="_blank"><img src="chime.png" alt="Project image" style="height: 60px; width: auto;"></a>
+    <div>
+      <h1>MESONIFICATION</h1>
+      <a href="https://chimedata.cargo.site/mesons" target="_blank" style="color: rgb(220, 220, 220);">Documentation</a>
+    </div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="controls-left">
+    <button class="btn" id="generateBtn">Generate</button>
+    <button class="btn inactive" id="runBtn">Run</button>
+    <button class="btn" id="pauseResumeBtn" style="display:none;">&#9646;&#9646;</button>
+    <button class="btn" id="stopBtn" style="display:none;">&#9632;</button>
+  </div>
+  <div class="controls-right">
+    <div class="ctrl-group">
+      <label>Speed</label>
+      <input type="range" id="speedSlider" min="10" max="100" value="25">
+      <span class="ctrl-val" id="speedVal">0.25x</span>
+    </div>
+    <div class="ctrl-group">
+      <label>Duration</label>
+      <input type="range" id="durationSlider" min="0" max="100" value="0">
+      <span class="ctrl-val" id="durationVal">1s</span>
+    </div>
+    <div class="ctrl-group">
+      <label>Position</label>
+      <input type="range" id="positionSlider" min="1" max="259" value="142">
+      <span class="ctrl-val" id="positionVal">0.55x</span>
+    </div>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="graph-row" id="graphRow"></div>
+<footer>
+  <div class="status-box">
+    <div class="status-label">Status</div>
+    <div class="status-text" id="statusText">Select particles to begin</div>
+  </div>
+  <div class="particle-selector">
+    <h2>Particle Selector</h2>
+    <div class="particle-grid" id="particleGrid"></div>
+  </div>
+</footer>
+
+<!-- ─── Landing page ─────────────────────────────────────────────────── -->
+<div id="landingPage">
+
+  <div class="landing-header">
+    <a href="https://chime.glasgow.ac.uk/" target="_blank">
+      <img src="chime.png" alt="CHIME" style="height:60px; width:auto;">
+    </a>
+    <div style="display:flex; flex-direction:column; gap:0.2rem;">
+      <h1 style="font-weight:300; font-size:2rem; letter-spacing:0.08em; font-family:Arial,sans-serif;">MESONIFICATION</h1>
+      <div style="font-size:0.75rem; letter-spacing:0.3em; opacity:0.4; text-transform:uppercase; font-family:Arial,sans-serif;">University of Glasgow · CHIME</div>
+    </div>
+  </div>
+
+  <div class="landing-body">
+
+    <!-- Left col -->
+    <div class="landing-col">
+      <div class="landing-eyebrow">about the project</div>
+      <p class="landing-body-text">
+        This website sonifies spectrography data from hybrid meson decompositions -
+        listening through mass rather than time. We've attempted to sum down three dimensional
+        energy into one dimensional sound.
+      </p>
+      <div class="landing-eyebrow">the physics</div>
+      <p class="landing-body-text">
+        The primary goal of GlueX is to search for exotic hybrid mesons: particles
+        whose internal structure involves not just quarks, but the gluon field itself
+        carrying quantum numbers. These states, predicted by Quantum Chromodynamics
+        but never conclusively observed, would fundamentally deepen our understanding
+        of how matter is bound together at the smallest scales.
+      </p>
+      <p class="landing-body-text">
+        The spherical harmonic moments used in this project are the mathematical
+        tools physicists use to decode the angular distributions of GlueX decay
+        products — the observable signatures that reveal which resonances are present.
+      </p>
+    </div>
+
+    <!-- Right col -->
+    <div class="landing-col">
+      <div class="landing-eyebrow">sonification</div>
+      <p class="landing-body-text">
+        Mesonification translates the spectroscopic fingerprints of subatomic
+        particles — mesons — into sound. By selecting particles from the particle
+        selector, the physics engine computes their spherical harmonic moment
+        distributions, which are then mapped onto audio parameters in real time.
+      </p>
+      <p class="landing-body-text">
+        The result is a direct acoustic representation of quantum interference —
+        the way different meson waves overlap and interact to produce the angular
+        patterns observed in particle detectors.
+      </p>
+      <button class="landing-enter-btn" id="enterBtn">Enter →</button>
+    </div>
+
+  </div>
+
+  <div class="landing-footer">
+    <span>CHIME · University of Glasgow</span>
+    <span><a href="https://chimedata.cargo.site/mesons" target="_blank" style="color:inherit; text-decoration:none;">About the project ↗</a></span>
+  </div>
+
+</div>
+
+<!-- Terminal popup -->
+<div class="terminal-overlay" id="terminalOverlay">
+  <div class="terminal-box">
+    <div class="terminal-header">Initialising Physics Engine</div>
+    <div class="terminal-body" id="terminalBody"></div>
+  </div>
+</div>
+
+<script src="meson_dataset10.js"></script>
+<script type="text/javascript">
+  var heavyModule = null;
+  var loader = null;
+
+  window.onload = function() {
+    meson_dataset10_Module().then(loadedModule => {
+      heavyModule = loadedModule;
+      loader = new heavyModule.AudioLibLoader();
+      console.log("Heavy Module & Loader Ready");
+    });
+  }
+</script>
+
+<script>
+let appState = 'idle';
+let speedFactor = 0.25;
+let lastTime = null;
+let selectedParticles = new Set();
+let currentPosition = 142 / 259;
+
+function setState(newState) {
+  appState = newState;
+  const generateBtn    = document.getElementById('generateBtn');
+  const runBtn         = document.getElementById('runBtn');
+  const pauseResumeBtn = document.getElementById('pauseResumeBtn');
+  const stopBtn        = document.getElementById('stopBtn');
+  const particleGrid   = document.getElementById('particleGrid');
+  const statusText     = document.getElementById('statusText');
+
+  generateBtn.classList.remove('inactive');
+  runBtn.classList.remove('inactive');
+  particleGrid.classList.remove('locked');
+
+  switch (newState) {
+    case 'idle':
+      runBtn.classList.add('inactive');
+      pauseResumeBtn.style.display = 'none';
+      stopBtn.style.display = 'none';
+      statusText.textContent = 'Select particles to begin';
+      break;
+    case 'generating':
+      generateBtn.classList.add('inactive');
+      runBtn.classList.add('inactive');
+      particleGrid.classList.add('locked');
+      pauseResumeBtn.style.display = 'none';
+      stopBtn.style.display = 'none';
+      statusText.textContent = 'Generating particle data...';
+      break;
+    case 'ready':
+      pauseResumeBtn.style.display = 'none';
+      stopBtn.style.display = 'none';
+      statusText.textContent = 'Ready — click Run to play';
+      break;
+    case 'playing':
+      generateBtn.classList.add('inactive');
+      runBtn.classList.add('inactive');
+      particleGrid.classList.add('locked');
+      pauseResumeBtn.style.display = 'inline-block';
+      pauseResumeBtn.textContent = '⏸';
+      stopBtn.style.display = 'inline-block';
+      statusText.textContent = 'Playing';
+      break;
+    case 'paused':
+      generateBtn.classList.add('inactive');
+      runBtn.classList.add('inactive');
+      particleGrid.classList.add('locked');
+      pauseResumeBtn.style.display = 'inline-block';
+      pauseResumeBtn.textContent = '▶';
+      stopBtn.style.display = 'inline-block';
+      statusText.textContent = 'Paused';
+      break;
+  }
+}
+
+function sliderToNorm(sliderInt) { return sliderInt / 100; }
+function normToSeconds(norm) { return 1 + norm * 59; }
+function formatDuration(seconds) {
+  if (seconds < 60) return seconds < 10 ? seconds.toFixed(1) + 's' : Math.round(seconds) + 's';
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+const particles = [
+  { name: 'Pion',      symbol: 'π⁰',  pdgId: 111, l: 0, m: 0, epsilon: +1, m1: 0.0,    m2: 0.0    },
+  { name: 'Pion',      symbol: 'π±',  pdgId: 211, l: 0, m: 0, epsilon: -1, m1: 0.0,    m2: 0.0    },
+  { name: 'Eta',       symbol: 'η',   pdgId: 221, l: 0, m: 0, epsilon: +1, m1: 0.0,    m2: 0.0    },
+  { name: 'Eta Prime', symbol: "η'",  pdgId: 331, l: 0, m: 0, epsilon: +1, m1: 0.0,    m2: 0.0    },
+  { name: 'Kaon',      symbol: 'K±',  pdgId: 321, l: 0, m: 0, epsilon: -1, m1: 0.0,    m2: 0.0    },
+  { name: 'Kaon',      symbol: 'K⁰',  pdgId: 311, l: 0, m: 0, epsilon: -1, m1: 0.0,    m2: 0.0    },
+  { name: 'Rho',       symbol: 'ρ',   pdgId: 113, l: 1, m: 0, epsilon: +1, m1: 0.1396, m2: 0.1396 },
+  { name: 'Omega',     symbol: 'ω',   pdgId: 223, l: 1, m: 0, epsilon: +1, m1: 0.1350, m2: 0.1350 },
+  { name: 'Phi',       symbol: 'φ',   pdgId: 333, l: 1, m: 0, epsilon: +1, m1: 0.4937, m2: 0.4937 },
+  { name: 'J/Psi',     symbol: 'J/ψ', pdgId: 443, l: 1, m: 0, epsilon: +1, m1: 0.1396, m2: 0.1396 },
+];
+
+async function initAudio() {
+  if (!loader || loader.webAudioContext) return;
+  const audioCtx = new AudioContext({ sampleRate: 44100 });
+  try {
+    await loader.init({
+      blockSize: 128,
+      webAudioContext: audioCtx,
+      printHook: (msg) => console.log("HV Print:", msg),
+      sendHook: (name, msg) => {
+        console.log("HV Send:", name, msg);
+      },
+      receivers: ['H00_', 'H10_', 'H11_', 'H20_', 'H21_', 'H22_', 'H30_', 'H31_', 'H32_', 'H42_']
+    });
+    await audioCtx.resume();
+    loader.start();
+    sendToPatch('volume', speedFactor);
+    const initDur = normToSeconds(sliderToNorm(parseInt(document.getElementById('durationSlider').value)));
+    sendToPatch('duration', initDur);
+    console.log("Audio Engine Started");
+  } catch (err) {
+    console.error("Audio Init Failed:", err);
+  }
+}
+
+function sendToPatch(name, value) {
+  if (!loader) return;
+  if (loader.webAudioWorklet) {
+    loader.sendFloatParameterToWorklet(name, value);
+  } else if (loader.audiolib) {
+    loader.audiolib.setFloatParameter(name, value);
+  }
+}
+
+// ─── Send current position values for all harmonics ───────────────────────────
+const pdKeys = ['H00_', 'H10_', 'H11_', 'H20_', 'H21_', 'H22_', 'H30_', 'H31_', 'H32_', 'H42_'];
+
+function sendPositionValues() {
+  const idx = Math.max(0, Math.min(Math.floor(currentPosition * 259), 258));
+  pdKeys.forEach((pdKey, i) => {
+    const c = canvases[i];
+    if (c && c.graphData) {
+      const val = c.graphData[idx] ?? 0;
+      c.opacity = Math.abs(val) * 0.8 + 0.2;
+      sendToPatch(pdKey, val);
+    }
+  });
+}
+
+// ─── JS-side enrichment — fills empty slots with derived arrays ───────────────
+function enrichArrays(arrays) {
+  // arrays: list of 10 Float32 arrays, some may be all-zeros
+  const n = arrays[0].length;
+  const filled = arrays.map(a => Float32Array.from(a));
+
+  // Helper: power-norm a raw array to [-1,1]
+  function powerNorm(arr, exp = 0.3) {
+    let mx = 0;
+    for (let i = 0; i < arr.length; i++) { const v = Math.abs(arr[i]); if (v > mx) mx = v; }
+    if (mx === 0) return arr;
+    const out = new Float32Array(arr.length);
+    for (let i = 0; i < arr.length; i++) {
+      const s = arr[i] / mx;
+      out[i] = Math.sign(s) * Math.pow(Math.abs(s), exp);
+    }
+    return out;
+  }
+
+  // Helper: is array essentially empty?
+  function isEmpty(arr) {
+    for (let i = 0; i < arr.length; i++) { if (Math.abs(arr[i]) > 0.001) return false; }
+    return true;
+  }
+
+  // Collect non-empty physical arrays as source material
+  const sources = filled.filter(a => !isEmpty(a));
+  if (sources.length === 0) return arrays; // nothing to work with
+
+  // Strategy 1: harmonic enrichment — add 2nd harmonic (compress x-axis by 2) at half amplitude
+  function addHarmonics(arr) {
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      out[i] = arr[i];
+      // 2nd harmonic: sample at 2x position, wrap around
+      const i2 = Math.min(Math.floor(i * 2), n - 1);
+      out[i] += arr[i2] * 0.5;
+      // 3rd harmonic at quarter amplitude
+      const i3 = Math.min(Math.floor(i * 3), n - 1);
+      out[i] += arr[i3] * 0.25;
+    }
+    return powerNorm(out);
+  }
+
+  // Strategy 2: cross-talk — blend neighbouring arrays together
+  function crossTalk(a, b, ratio = 0.3) {
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      out[i] = a[i] * (1 - ratio) + b[i] * ratio;
+    }
+    return powerNorm(out);
+  }
+
+  // Strategy 3: derivative — rate of change of an array, creates spiky versions
+  function derivative(arr) {
+    const out = new Float32Array(n);
+    for (let i = 1; i < n - 1; i++) {
+      out[i] = (arr[i + 1] - arr[i - 1]) * 0.5;
+    }
+    out[0] = arr[1] - arr[0];
+    out[n - 1] = arr[n - 1] - arr[n - 2];
+    return powerNorm(out);
+  }
+
+  // Strategy 4: golden ratio phase shift — shift array by golden ratio of its length
+  const phi = (1 + Math.sqrt(5)) / 2;
+  function phaseShift(arr, shiftFrac) {
+    const shift = Math.floor(shiftFrac * n);
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      out[i] = arr[(i + shift) % n];
+    }
+    return powerNorm(out);
+  }
+
+  // Fill empty slots using derived versions of physical sources
+  const derivations = [
+    () => addHarmonics(sources[0]),
+    () => derivative(sources[0]),
+    () => phaseShift(sources[0], 1 / phi),
+    () => crossTalk(sources[0], sources[sources.length > 1 ? 1 : 0], 0.4),
+    () => addHarmonics(sources[sources.length > 1 ? 1 : 0]),
+    () => derivative(sources[sources.length > 1 ? 1 : 0]),
+    () => phaseShift(sources[0], 2 / phi),
+    () => crossTalk(sources[0], sources[sources.length > 1 ? 1 : 0], 0.7),
+    () => phaseShift(sources[sources.length > 1 ? 1 : 0], 1 / phi),
+    () => derivative(crossTalk(sources[0], sources[sources.length > 1 ? 1 : 0], 0.5)),
+  ];
+
+  let derivIdx = 0;
+  for (let i = 0; i < filled.length; i++) {
+    if (isEmpty(filled[i]) && derivIdx < derivations.length) {
+      filled[i] = derivations[derivIdx]();
+      derivIdx++;
+    }
+  }
+
+  return filled.map(a => Array.from(a));
+}
+
+const harmonics = [
+  { l:0, m:0, label:'Y₀⁰', sub:'l=0, m=0', hz:0.25,  pdKey:'H00_' },
+  { l:1, m:0, label:'Y₁⁰', sub:'l=1, m=0', hz:0.5,   pdKey:'H10_' },
+  { l:1, m:1, label:'Y₁¹', sub:'l=1, m=1', hz:1.0,   pdKey:'H11_' },
+  { l:2, m:0, label:'Y₂⁰', sub:'l=2, m=0', hz:0.75,  pdKey:'H20_' },
+  { l:2, m:1, label:'Y₂¹', sub:'l=2, m=1', hz:1.5,   pdKey:'H21_' },
+  { l:2, m:2, label:'Y₂²', sub:'l=2, m=2', hz:2.25,  pdKey:'H22_' },
+  { l:3, m:0, label:'Y₃⁰', sub:'l=3, m=0', hz:1.0,   pdKey:'H30_' },
+  { l:3, m:1, label:'Y₃¹', sub:'l=3, m=1', hz:2.0,   pdKey:'H31_' },
+  { l:3, m:2, label:'Y₃²', sub:'l=3, m=2', hz:3.0,   pdKey:'H32_' },
+  { l:4, m:2, label:'Y₄²', sub:'l=4, m=2', hz:4.0,   pdKey:'H42_' },
+];
+
+const N = 24;
+const canvases = [];
+const angles = new Array(harmonics.length).fill(0);
+
+function factorial(n){ if(n<=1) return 1; let r=1; for(let i=2;i<=n;i++) r*=i; return r; }
+
+function assocLegendre(l,m,x){
+  m=Math.abs(m); let pmm=1;
+  if(m>0){ const sx=Math.sqrt((1-x)*(1+x)); let f=1; for(let i=1;i<=m;i++){ pmm*=-f*sx; f+=2; } }
+  if(l===m) return pmm;
+  let pmm1=x*(2*m+1)*pmm;
+  if(l===m+1) return pmm1;
+  let pll=0;
+  for(let ll=m+2;ll<=l;ll++){ pll=((2*ll-1)*x*pmm1-(ll+m-1)*pmm)/(ll-m); pmm=pmm1; pmm1=pll; }
+  return pll;
+}
+
+function Ylm(l,m,t,p){
+  const a=Math.abs(m);
+  const n=Math.sqrt((2*l+1)/(4*Math.PI)*factorial(l-a)/factorial(l+a));
+  const P=assocLegendre(l,a,Math.cos(t));
+  if(m===0) return n*P;
+  if(m>0) return Math.SQRT2*n*P*Math.cos(m*p);
+  return Math.SQRT2*n*P*Math.sin(a*p);
+}
+
+function getCanvasSize() {
+  const availableWidth = window.innerWidth * 0.96;
+  const availableHeight = window.innerHeight * 0.4;
+  return Math.floor(Math.min(availableWidth / harmonics.length, availableHeight, 150));
+}
+
+function drawGraph(gcv, data) {
+  const ctx = gcv.getContext('2d');
+  const w = gcv.width, h = gcv.height;
+  ctx.clearRect(0, 0, w, h);
+  const pad = { top: 4, right: 4, bottom: 14, left: 4 };
+  const pw = w - pad.left - pad.right;
+  const ph = h - pad.top - pad.bottom;
+  const midY = pad.top + ph / 2;
+
+  ctx.strokeStyle = 'rgba(40,40,40,1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, midY); ctx.lineTo(pad.left + pw, midY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad.left, pad.top); ctx.lineTo(pad.left, pad.top + ph); ctx.stroke();
+
+  if (data && data.length > 0) {
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.2;
+    data.forEach((val, i) => {
+      const x = pad.left + (i / (data.length - 1)) * pw;
+      const y = midY - (val * ph / 2);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  const lx = pad.left + currentPosition * pw;
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(lx, pad.top); ctx.lineTo(lx, pad.top + ph); ctx.stroke();
+}
+
+function redrawAllGraphs() {
+  canvases.forEach(c => {
+    if (c.gcv) drawGraph(c.gcv, c.graphData || null);
+  });
+}
+
+function buildGrid() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  canvases.length = 0;
+  const size = getCanvasSize();
+
+  harmonics.forEach(({ l, m, label, sub, hz }, index) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = size;
+    const btn = document.createElement('button');
+    btn.className = 'harmonic-btn';
+    btn.innerHTML = `${label}<br>${sub}`;
+    btn.addEventListener('click', async () => {
+      await initAudio();
+      const isToggled = btn.classList.toggle('active');
+      canvases[index].active = isToggled;
+      sendToPatch(`sw${index + 1}`, isToggled ? 1.0 : 0.0);
+      if (isToggled && index < 8) sendToPatch(`L${index + 1}`, harmonics[index].hz * speedFactor);
+    });
+    cell.appendChild(cv);
+    cell.appendChild(btn);
+    grid.appendChild(cell);
+    canvases.push({ cv, gcv: null, l, m, hz, active: false, opacity: 0.2, _lastDrawnOpacity: 0.2, graphData: null });
+    drawSH(cv, l, m, 0);
+  });
+
+  const graphRow = document.getElementById('graphRow');
+  graphRow.innerHTML = '';
+  canvases.forEach((c, i) => {
+    const gcv = document.createElement('canvas');
+    gcv.className = 'graph-canvas';
+    gcv.width = size;
+    gcv.height = Math.floor(size * 0.5);
+    drawGraph(gcv, null);
+    graphRow.appendChild(gcv);
+    canvases[i].gcv = gcv;
+  });
+}
+
+function buildParticleGrid() {
+  const grid = document.getElementById('particleGrid');
+  grid.innerHTML = '';
+  particles.forEach((particle, index) => {
+    const btn = document.createElement('button');
+    btn.className = 'particle-btn';
+    btn.innerHTML = `<div class="particle-info"><div class="particle-symbol">${particle.symbol}</div><div class="particle-name"></div><div class="particle-meta"></div></div>`;
+    btn.addEventListener('click', () => {
+      if (appState !== 'idle' && appState !== 'ready') return;
+      btn.classList.toggle('selected');
+    });
+    grid.appendChild(btn);
+  });
+}
+
+function drawSH(cv, l, m, rotY) {
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  ctx.clearRect(0, 0, w, h);
+  const cx = w/2, cy = h/2, R = w*0.34;
+  const dth = Math.PI/N, dph = 2*Math.PI/N;
+  let maxAbs = 0;
+  for(let i=0;i<=N;i++) for(let j=0;j<=N;j++){ let v=Math.abs(Ylm(l,m,i*dth,j*dph)); if(v>maxAbs) maxAbs=v; }
+  if(maxAbs===0) maxAbs=1;
+  const pts = [];
+  for(let i=0;i<=N;i++){
+    for(let j=0;j<=N;j++){
+      const th=i*dth, ph=j*dph, v=Ylm(l,m,th,ph), r=R*(Math.abs(v)/maxAbs);
+      const x0=r*Math.sin(th)*Math.cos(ph), y0=r*Math.sin(th)*Math.sin(ph), z0=r*Math.cos(th);
+      const cR=Math.cos(rotY), sR=Math.sin(rotY);
+      const x1=x0*cR+y0*sR, y1=-x0*sR+y0*cR;
+      const tilt=0.34, cT=Math.cos(tilt), sT=Math.sin(tilt);
+      const y2=y1*cT-z0*sT, z2=y1*sT+z0*cT;
+      pts.push({sx:cx+x1, sy:cy-z2, depth:y2, v});
+    }
+  }
+  pts.sort((a,b)=>a.depth-b.depth);
+  const dotSize = Math.max(1.2, w/72);
+  pts.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.sx, p.sy, dotSize, 0, Math.PI*2);
+    const alpha = 0.55 + 0.45 * (p.depth/R + 1) / 2;
+    const canvasOpacity = (canvases[canvases.findIndex(c => c.cv === cv)] || {}).opacity ?? 1.0;
+    ctx.fillStyle = p.v >= 0
+      ? `rgba(100,100,100,${alpha * canvasOpacity})`
+      : `rgba(255,255,255,${alpha * canvasOpacity})`;
+    ctx.fill();
+  });
+}
+
+function animate(ts) {
+  if (appState !== 'paused' && lastTime) {
+    const dt = (ts - lastTime)/1000;
+    canvases.forEach((c, i) => {
+      if (c.active) {
+        angles[i] = (angles[i] + dt * c.hz * speedFactor * Math.PI * 2) % (Math.PI*2);
+        drawSH(c.cv, c.l, c.m, angles[i]);
+      } else {
+        const prev = c._lastDrawnOpacity ?? 1.0;
+        if (Math.abs((c.opacity ?? 1.0) - prev) > 0.005) {
+          drawSH(c.cv, c.l, c.m, angles[i]);
+          c._lastDrawnOpacity = c.opacity;
+        }
+      }
+    });
+  }
+  lastTime = ts;
+  requestAnimationFrame(animate);
+}
+
+// ─── Landing page ─────────────────────────────────────────────────────────────
+document.getElementById('enterBtn').addEventListener('click', async () => {
+  terminalShow();
+  const ready = await ensurePyodide();
+  if (ready) {
+    const landing = document.getElementById('landingPage');
+    landing.classList.add('hidden');
+    setTimeout(() => { landing.style.display = 'none'; }, 650);
+    terminalHide();
+  }
+});
+
+let pyodide = null;
+let pyodideReady = false;
+let pyodideLoading = false;
+
+function terminalShow() {
+  document.getElementById('terminalOverlay').classList.add('visible');
+  document.getElementById('terminalBody').innerHTML = '';
+}
+
+function terminalHide() {
+  document.getElementById('terminalOverlay').classList.remove('visible');
+}
+
+function terminalLog(msg, dim = false) {
+  const body = document.getElementById('terminalBody');
+  const line = document.createElement('span');
+  line.className = 'terminal-line' + (dim ? ' dim' : '');
+  line.textContent = msg;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+}
+
+const harmonicKeyMap = {
+  '0,0': 'H00_', '1,0': 'H10_', '1,1': 'H11_',
+  '2,0': 'H20_', '2,1': 'H21_', '2,2': 'H22_',
+  '3,0': 'H30_', '3,1': 'H31_', '3,2': 'H32_', '4,2': 'H42_',
+};
+
+async function ensurePyodide() {
+  if (pyodideReady) return true;
+  if (pyodideLoading) return false;
+  pyodideLoading = true;
+
+  terminalShow();
+  terminalLog('Initialising Pyodide runtime...');
+  document.getElementById('statusText').textContent = 'Loading physics engine...';
+
+  try {
+    pyodide = await loadPyodide({
+      stdout: (msg) => terminalLog(msg),
+      stderr: (msg) => terminalLog(msg, true),
+    });
+    terminalLog('Pyodide runtime ready.');
+
+    terminalLog('Loading numpy, scipy, micropip...');
+    document.getElementById('statusText').textContent = 'Installing packages...';
+    await pyodide.loadPackage(['numpy', 'scipy', 'micropip'], {
+      messageCallback: (msg) => terminalLog(msg),
+      errorCallback:   (msg) => terminalLog(msg, true),
+    });
+    terminalLog('Installing particle library via micropip...');
+    await pyodide.runPythonAsync(`
+      import micropip
+      await micropip.install('particle')
+    `);
+    terminalLog('particle installed.');
+
+    terminalLog('Fetching physics engine files...');
+    document.getElementById('statusText').textContent = 'Loading physics files...';
+    const pyFiles = ['amplitude_model.py', 'partial_wave.py', 'physics_engine.py'];
+    for (const fname of pyFiles) {
+      const resp = await fetch(fname);
+      if (!resp.ok) throw new Error(`Failed to fetch ${fname}: ${resp.status}`);
+      const text = await resp.text();
+      pyodide.FS.writeFile('/home/pyodide/' + fname, text);
+      terminalLog(`Loaded ${fname}`);
+    }
+
+    terminalLog('Configuring Python path...');
+    await pyodide.runPythonAsync(`
+      import sys
+      sys.path.insert(0, '/home/pyodide')
+      from particle import Particle
+    `);
+    terminalLog('Physics engine ready.');
+
+    pyodideReady = true;
+    return true;
+
+  } catch (err) {
+    terminalLog(`Error: ${err.message}`);
+    console.error('Pyodide load failed:', err);
+    document.getElementById('statusText').textContent = 'Failed to load physics engine';
+    pyodideLoading = false;
+    return false;
+  }
+}
+
+async function runGeneration(selectedParticleData) {
+  const particleList = selectedParticleData.map(p => ({
+    pdgId: p.pdgId, l: p.l, m: p.m, epsilon: p.epsilon, m1: p.m1, m2: p.m2
+  }));
+  pyodide.globals.set('particle_input_json', JSON.stringify(particleList));
+
+  const result = await pyodide.runPythonAsync(`
+import sys
+sys.path.insert(0, '/home/pyodide')
+import numpy as np
+import json
+from amplitude_model import AmplitudeModel
+
+particle_data = json.loads(particle_input_json)
+
+from partial_wave import PartialWave
+pdg_masses = []
+for p in particle_data:
+    pw = PartialWave(int(p['pdgId']), l=int(p['l']), m=int(p['m']),
+                     epsilon=int(p['epsilon']), fraction=1.0, phase=0.0,
+                     m1=p['m1'], m2=p['m2'])
+    pdg_masses.append(pw.mass)
+
+centre = float(np.mean(pdg_masses))
+m1_shared = min(p['m1'] for p in particle_data)
+m2_shared = min(p['m2'] for p in particle_data)
+
+spread = max(float(np.max(pdg_masses)) - float(np.min(pdg_masses)) + 0.4, 0.4)
+Mx_min = max(0.05, centre - spread)
+Mx_max = centre + spread
+
+model = AmplitudeModel(Mx_min=Mx_min, Mx_max=Mx_max, num_bins=259,
+                       m1=m1_shared, m2=m2_shared)
+
+import math
+wave_idx = 0
+for p in particle_data:
+    l = int(p['l'])
+    for m_proj in range(-l, l + 1):
+        phase = (wave_idx * math.pi / 4) % (2 * math.pi)
+        model.add_wave(int(p['pdgId']), l=l, m=m_proj,
+                       epsilon=int(p['epsilon']),
+                       fraction=1.0,
+                       phase=phase)
+        wave_idx += 1
+
+combined = {}
+for alpha in [0, 1, 2, 3]:
+    moments = model.generate_moments(L_max=10, alpha=alpha, include_zeros=True)
+    for (L, M), arr in moments.items():
+        key = f"{L},{M}"
+        if key not in combined:
+            combined[key] = np.zeros(259)
+        combined[key] = combined[key] + arr
+
+overall_max = max((float(np.max(np.abs(arr))) for arr in combined.values()), default=1.0)
+threshold = overall_max * 0.0001
+non_zero = {k: v for k, v in combined.items() if float(np.max(np.abs(v))) > threshold}
+sorted_moments = sorted(non_zero.items(), key=lambda x: float(np.max(np.abs(x[1]))), reverse=True)
+top10 = sorted_moments[:10]
+
+def power_norm(arr):
+    mx = float(np.max(np.abs(arr)))
+    if mx <= 0:
+        return arr.tolist()
+    scaled = arr / mx
+    return (np.sign(scaled) * np.abs(scaled) ** 0.3).tolist()
+
+output = []
+for key, arr in top10:
+    output.append({'key': key, 'data': power_norm(arr)})
+
+while len(output) < 10:
+    output.append({'key': 'empty', 'data': [0.0] * 259})
+
+print(f"Total candidate moments: {len(combined)}")
+print(f"Non-zero moments: {len(non_zero)}")
+print(f"Selected top {len(top10)}: {[x[0] for x in top10]}")
+
+json.dumps(output)
+  `);
+
+  const parsed = JSON.parse(result);
+
+  // Extract the 10 arrays, then enrich empty slots in JS
+  const rawArrays = parsed.map(item => item.data);
+  const enriched = enrichArrays(rawArrays);
+
+  const remapped = {};
+  enriched.forEach((arr, i) => { remapped[pdKeys[i]] = arr; });
+  return remapped;
+}
+
+const harmonicIndexMap = {
+  'H00_': 0, 'H10_': 1, 'H11_': 2, 'H20_': 3, 'H21_': 4,
+  'H22_': 5, 'H30_': 6, 'H31_': 7, 'H32_': 8, 'H42_': 9,
+};
+
+function sendMomentsToAudio(moments) {
+  for (const [pdKey, values] of Object.entries(moments)) {
+    const hIdx = harmonicIndexMap[pdKey];
+    if (hIdx !== undefined && canvases[hIdx]) {
+      canvases[hIdx].graphData = values;
+      drawGraph(canvases[hIdx].gcv, values);
+    }
+  }
+  sendPositionValues();
+}
+
+// ─── Generate button ───────────────────────────────────────────────────────────
+document.getElementById('generateBtn').addEventListener('click', async () => {
+  if (appState !== 'idle' && appState !== 'ready') return;
+  const selectedBtns = [...document.querySelectorAll('.particle-btn.selected')];
+  if (selectedBtns.length === 0) {
+    document.getElementById('statusText').textContent = 'Select at least one particle first';
+    return;
+  }
+  setState('generating');
+  const selectedParticleData = [];
+  selectedBtns.forEach(btn => {
+    const idx = [...document.querySelectorAll('.particle-btn')].indexOf(btn);
+    if (idx >= 0) selectedParticleData.push(particles[idx]);
+  });
+  const ready = await ensurePyodide();
+  if (!ready) { setState('idle'); return; }
+  try {
+    document.getElementById('statusText').textContent = 'Generating particle data...';
+    const moments = await runGeneration(selectedParticleData);
+    await initAudio();
+
+    for (let i = 0; i < 10; i++) { sendToPatch(`par${i + 1}`, 0.0); }
+    [...document.querySelectorAll('.particle-btn')].forEach((btn, i) => {
+      sendToPatch(`par${i + 1}`, btn.classList.contains('selected') ? 1.0 : 0.0);
+    });
+
+    sendMomentsToAudio(moments);
+    terminalHide();
+    setState('ready');
+  } catch (err) {
+    terminalLog(`Generation error: ${err.message}`);
+    console.error('Generation failed:', err);
+    document.getElementById('statusText').textContent = 'Generation failed — check console';
+    setState('idle');
+  }
+});
+
+// ─── Playback ──────────────────────────────────────────────────────────────────
+let playbackTimer = null;
+let playbackInterval = null;
+let playbackDurationMs = 0;
+let playbackElapsedMs = 0;
+let playbackStartTime = null;
+
+function startPlaybackTimer() {
+  playbackStartTime = Date.now();
+  const remaining = playbackDurationMs - playbackElapsedMs;
+
+  if (playbackTimer) clearTimeout(playbackTimer);
+  if (playbackInterval) clearInterval(playbackInterval);
+
+  playbackInterval = setInterval(() => {
+    const elapsed = playbackElapsedMs + (Date.now() - playbackStartTime);
+    const progress = Math.min(elapsed / playbackDurationMs, 1.0);
+    currentPosition = progress;
+    const sliderVal = Math.round(progress * 259);
+    document.getElementById('positionSlider').value = sliderVal;
+    document.getElementById('positionVal').textContent = progress.toFixed(2) + 'x';
+    sendPositionValues();
+    redrawAllGraphs();
+  }, 16);
+
+  playbackTimer = setTimeout(() => {
+    clearInterval(playbackInterval);
+    playbackInterval = null;
+    playbackTimer = null;
+    playbackElapsedMs = 0;
+    currentPosition = 0;
+    document.getElementById('positionSlider').value = 1;
+    document.getElementById('positionVal').textContent = '0.00x';
+    redrawAllGraphs();
+    setState('ready');
+  }, remaining);
+}
+
+function pausePlaybackTimer() {
+  if (playbackTimer) { clearTimeout(playbackTimer); playbackTimer = null; }
+  if (playbackInterval) { clearInterval(playbackInterval); playbackInterval = null; }
+  if (playbackStartTime) { playbackElapsedMs += Date.now() - playbackStartTime; playbackStartTime = null; }
+}
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  if (appState !== 'ready') return;
+  await initAudio();
+  if (loader) loader.start();
+  const norm = sliderToNorm(parseInt(document.getElementById('durationSlider').value));
+  playbackDurationMs = normToSeconds(norm) * 1000;
+  playbackElapsedMs = 0;
+  currentPosition = 0;
+  document.getElementById('positionSlider').value = 1;
+  document.getElementById('positionVal').textContent = '0.00x';
+  setState('playing');
+  startPlaybackTimer();
+});
+
+document.getElementById('pauseResumeBtn').addEventListener('click', () => {
+  if (appState === 'playing') {
+    pausePlaybackTimer();
+    if (loader) loader.stop();
+    setState('paused');
+  } else if (appState === 'paused') {
+    if (loader) loader.start();
+    setState('playing');
+    startPlaybackTimer();
+  }
+});
+
+document.getElementById('stopBtn').addEventListener('click', () => {
+  pausePlaybackTimer();
+  playbackElapsedMs = 0;
+  currentPosition = 0;
+  if (loader) loader.stop();
+  document.getElementById('positionSlider').value = 1;
+  document.getElementById('positionVal').textContent = '0.00x';
+  redrawAllGraphs();
+  setState('ready');
+});
+
+document.getElementById('speedSlider').addEventListener('input', async (e) => {
+  await initAudio();
+  speedFactor = e.target.value / 100;
+  document.getElementById('speedVal').textContent = speedFactor.toFixed(2) + 'x';
+  sendToPatch('volume', speedFactor);
+  updatePatchFrequencies();
+});
+
+document.getElementById('durationSlider').addEventListener('input', async (e) => {
+  await initAudio();
+  const norm = sliderToNorm(parseInt(e.target.value));
+  const seconds = normToSeconds(norm);
+  document.getElementById('durationVal').textContent = formatDuration(seconds);
+  sendToPatch('duration', seconds);
+});
+
+document.getElementById('positionSlider').addEventListener('input', async (e) => {
+  await initAudio();
+  const val = e.target.value / 259;
+  currentPosition = val;
+  document.getElementById('positionVal').textContent = val.toFixed(2) + 'x';
+  sendPositionValues();
+  redrawAllGraphs();
+});
+
+function updatePatchFrequencies() {
+  canvases.forEach((c, i) => {
+    if (c.active && i < 8) sendToPatch(`L${i + 1}`, c.hz * speedFactor);
+  });
+}
+
+window.addEventListener('resize', buildGrid);
+buildGrid();
+buildParticleGrid();
+setState('idle');
+requestAnimationFrame(animate);
+</script>
+</body>
 </html>
